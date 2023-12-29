@@ -1,5 +1,7 @@
 ﻿Imports System.IO
 Imports IDM.Fungsi
+Imports System.Globalization
+
 Imports MySql.Data.MySqlClient
 
 Public Class Form1
@@ -38,6 +40,8 @@ Public Class Form1
         Else
             ProgressBar1.Value = ProgressBar1.Maximum
             stopwatch.Stop()
+            ResetUIAndShowCompletionMessage()
+
         End If
     End Sub
 
@@ -183,8 +187,10 @@ Public Class Form1
 
     Private Sub WriteToFile(plu As String, desc2 As String, rowId As Integer)
         Try
+            Dim culture As New CultureInfo("id-ID")
+            Dim dateString = DateTime.Now.ToString("ddMMMMyyyy", culture)
             Dim documentsPath As String = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-            Dim filePath As String = Path.Combine(documentsPath, "CheckPriceResult.txt")
+            Dim filePath As String = Path.Combine(documentsPath, $"CheckPriceResult_{dateString}.txt")
 
             ' Append the plu to the file
             Using writer As New StreamWriter(filePath, True) ' True to append data
@@ -203,7 +209,7 @@ Public Class Form1
         stopwatch.Reset()
         ProgressBar1.Value = 0
 
-        ProgressBar1.Maximum = 6000
+        ProgressBar1.Maximum = 2500
         ProgressBar1.Step = 1
         stopwatch.Start()
         Dim progressTimer As New Timer()
@@ -215,4 +221,15 @@ Public Class Form1
             BGWorker_CheckPrice.RunWorkerAsync()
         End If
     End Sub
+    Private Sub ResetUIAndShowCompletionMessage()
+
+        ProgressBar1.Value = 0
+        stopwatch.Stop()
+        stopwatch.Reset()
+
+        MessageBox.Show("Background worker has completed its task.", "Task Completed", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
+    'Private Sub BGWorker_CheckPrice_RunWorkerCompleted(sender As Object, e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BGWorker_CheckPrice.RunWorkerCompleted
+    '    ResetUIAndShowCompletionMessage()
+    'End Sub
 End Class
