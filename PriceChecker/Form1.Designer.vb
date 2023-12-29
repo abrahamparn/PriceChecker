@@ -34,7 +34,6 @@ Partial Class Form1
         '
         'Timer_CheckPrice
         '
-        Me.Timer_CheckPrice.Enabled = True
         Me.Timer_CheckPrice.Interval = 6000
         '
         'ProgressBar1
