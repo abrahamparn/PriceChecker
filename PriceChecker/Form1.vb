@@ -7,19 +7,19 @@ Public Class Form1
 
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         addToConstCRI()
-        InitializeProgressBar() '
+        ' InitializeProgressBar() '
     End Sub
-    Private Sub Timer_CheckPrice_Tick(sender As Object, e As EventArgs) Handles Timer_CheckPrice.Tick
-        ' Reset progress bar when the timer ticks
-        ProgressBar1.Value = 0
+    'Private Sub Timer_CheckPrice_Tick(sender As Object, e As EventArgs) Handles Timer_CheckPrice.Tick
+    '    ' Reset progress bar when the timer ticks
+    '    ProgressBar1.Value = 0
 
-        stopwatch.Stop()
-        stopwatch.Reset()
-        stopwatch.Start() ' Restart the stopwatch for a new cycle
-        If Not BGWorker_CheckPrice.IsBusy Then
-            BGWorker_CheckPrice.RunWorkerAsync()
-        End If
-    End Sub
+    '    stopwatch.Stop()
+    '    stopwatch.Reset()
+    '    stopwatch.Start() ' Restart the stopwatch for a new cycle
+    '    If Not BGWorker_CheckPrice.IsBusy Then
+    '        BGWorker_CheckPrice.RunWorkerAsync()
+    '    End If
+    'End Sub
     Private Sub InitializeProgressBar()
         ProgressBar1.Maximum = 6000 ' Set this to the same value as the timer interval
         ProgressBar1.Step = 1
@@ -61,8 +61,11 @@ Public Class Form1
             INNER JOIN prodmast ON prodmast.prdcd = mtran.plu 
             WHERE 
                 mtran.rtype = 'J' AND mtran.rowid > {startRowId} AND  
-                ((mtran.gross_dpp+mtran.PPN ) / mtran.qty) > mtran.price 
+                ((mtran.gross_dpp+mtran.PPN ) / mtran.qty) > mtran.price AND
+                 prodmast.BKP = 'Y' AND 
+                prodmast.SUB_BKP NOT IN ('A', 'B', 'D', 'L', 'P', 'R', 'S', 'T', 'W', 'G')
             GROUP BY mtran.docno, mtran.plu, mtran.shift, mtran.station, mtran.tanggal
+                 ORDER BY mtran.rowId ASC
             
             "
 
@@ -193,5 +196,23 @@ Public Class Form1
             MsgBox(ex.Message)
 
         End Try
+    End Sub
+
+    Private Sub DoCalculation_Click(sender As Object, e As EventArgs) Handles DoCalculation.Click
+        stopwatch.Stop()
+        stopwatch.Reset()
+        ProgressBar1.Value = 0
+
+        ProgressBar1.Maximum = 6000
+        ProgressBar1.Step = 1
+        stopwatch.Start()
+        Dim progressTimer As New Timer()
+        AddHandler progressTimer.Tick, AddressOf UpdateProgressBar
+
+        progressTimer.Interval = 1 ' Update progress every millisecond
+        progressTimer.Start()
+        If Not BGWorker_CheckPrice.IsBusy Then
+            BGWorker_CheckPrice.RunWorkerAsync()
+        End If
     End Sub
 End Class
