@@ -28,6 +28,7 @@ Partial Class Form1
         Me.ProgressBar1 = New System.Windows.Forms.ProgressBar()
         Me.DoCalculation = New System.Windows.Forms.Button()
         Me.RecipeChecker = New System.Windows.Forms.Button()
+        Me.CSV_Checker = New System.Windows.Forms.Button()
         Me.SuspendLayout()
         '
         'BGWorker_CheckPrice
@@ -71,11 +72,21 @@ Partial Class Form1
         Me.RecipeChecker.Text = "Recipe Checker"
         Me.RecipeChecker.UseVisualStyleBackColor = True
         '
+        'CSV_Checker
+        '
+        Me.CSV_Checker.Location = New System.Drawing.Point(433, 249)
+        Me.CSV_Checker.Name = "CSV_Checker"
+        Me.CSV_Checker.Size = New System.Drawing.Size(109, 43)
+        Me.CSV_Checker.TabIndex = 3
+        Me.CSV_Checker.Text = "CSV Checker"
+        Me.CSV_Checker.UseVisualStyleBackColor = True
+        '
         'Form1
         '
         Me.AutoScaleDimensions = New System.Drawing.SizeF(6.0!, 13.0!)
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.ClientSize = New System.Drawing.Size(800, 450)
+        Me.Controls.Add(Me.CSV_Checker)
         Me.Controls.Add(Me.RecipeChecker)
         Me.Controls.Add(Me.DoCalculation)
         Me.Controls.Add(Me.ProgressBar1)
@@ -90,4 +101,5 @@ Partial Class Form1
     Friend WithEvents ProgressBar1 As ProgressBar
     Friend WithEvents DoCalculation As Button
     Friend WithEvents RecipeChecker As Button
+    Friend WithEvents CSV_Checker As Button
 End Class

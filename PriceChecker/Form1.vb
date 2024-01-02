@@ -11,6 +11,7 @@ Public Class Form1
 
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         addToConstCRI()
+        CheckMasterResepTempTable()
         ' InitializeProgressBar()
     End Sub
     'Private Sub Timer_CheckPrice_Tick(sender As Object, e As EventArgs) Handles Timer_CheckPrice.Tick
@@ -413,6 +414,125 @@ Public Class Form1
             TraceLog(ex.Message)
             MsgBox(ex.Message)
         End Try
+    End Sub
+    Private Sub CheckMasterResepTempTable()
+        Try
+            Using connection As MySqlConnection = MasterMcon.Clone()
+                If connection.State = ConnectionState.Closed Then
+                    connection.Open()
+                End If
+
+                Using command As New MySqlCommand()
+                    command.Connection = connection
+                    command.CommandText = "Drop table if exists resepMasterTemp; "
+                    command.CommandText &= $"
+                            CREATE TABLE `resepMasterTemp` (
+                              `PLU_JUAL` VARCHAR(8) NOT NULL DEFAULT '',
+                              `PLU_BAHAN_BAKU` VARCHAR(8) NOT NULL DEFAULT '',
+                              `QTY` VARCHAR(8) NOT NULL DEFAULT '',
+                              `SATUAN` VARCHAR(50) NOT NULL DEFAULT '',
+                              PRIMARY KEY (`PLU_JUAL`,`PLU_BAHAN_BAKU`)
+                            ) ENGINE=INNODB DEFAULT CHARSET=latin1;
+                        "
+                    command.ExecuteNonQuery()
+                End Using
+            End Using
+        Catch ex As Exception
+            TraceLog(ex.Message)
+            MsgBox(ex.Message)
+
+        End Try
+    End Sub
+
+    Private Function CSVReader()
+        Dim folderPath As String = "D:\MasterResep"
+        ' Check the folder 
+        If Not System.IO.Directory.Exists(folderPath) = True Then
+            System.IO.Directory.CreateDirectory(folderPath)
+        End If
+
+        Dim files As String() = System.IO.Directory.GetFiles(folderPath)
+
+        Select Case files.Length
+            Case 0
+                MessageBox.Show("Folder D:\MasterResep tidak boleh kosong. ")
+                Return False
+            Case > 1
+                MessageBox.Show("Folder D:\MasterResep memiliki lebih dari satu file")
+                Return False
+            Case 1
+                If Not files(0).EndsWith(".csv") Then
+                    MessageBox.Show("Folder D:\MasterResep hanya boleh menganduk file csv")
+                    Return False
+                End If
+
+                If files(0).Contains("'") Then
+                    MessageBox.Show($"Nama file tidak boleh menganduk petik tunggal")
+                    Return False
+                End If
+
+                Try
+                    Using reader As New Microsoft.VisualBasic.FileIO.TextFieldParser(files(0))
+                        reader.TextFieldType = FileIO.FieldType.Delimited
+                        reader.SetDelimiters(",")
+
+                        If Not reader.EndOfData Then
+                            Dim currentRow As String() = reader.ReadFields()
+                            Dim columnCount As Integer = 0
+
+                            For Each field As String In currentRow
+                                If Not String.IsNullOrEmpty(field.Trim()) Then ' remove white spaces
+                                    columnCount += 1
+                                End If
+                            Next
+
+                            If columnCount > 4 Then
+                                MessageBox.Show("File csv memiliki lebih dari empat column")
+                                Return False
+                            End If
+                        End If
+                    End Using
+
+
+                    Using connection As MySqlConnection = MasterMcon.Clone()
+                        If connection.State = ConnectionState.Closed Then
+                            connection.Open()
+                        End If
+
+                        Using cmd As New MySqlCommand()
+                            cmd.Connection = connection
+                            cmd.CommandText = "DELETE FROM resepMasterTemp"
+                            cmd.ExecuteNonQuery()
+
+                            Dim csvFilePath As String = files(0).Replace("\", "\\")
+                            cmd.CommandText = "LOAD DATA LOCAL INFILE '" & csvFilePath &
+                                          "' INTO TABLE resepMasterTemp " &
+                                          "FIELDS TERMINATED BY ',' " &
+                                          "LINES TERMINATED BY '\r\n' " &
+                                          "IGNORE 1 LINES " &
+                                          "(PLU_JUAL, PLU_BAHAN_BAKU, QTY, SATUAN)"
+                            cmd.ExecuteNonQuery()
+                        End Using
+                        connection.Close()
+                    End Using
+
+                    'IO.File.Delete(files(0)) enable thisl ater
+                    Return True
+                Catch ex As Exception
+                    MessageBox.Show("Error reading the CSV file: " & ex.Message)
+                    TraceLog("Error reading the CSV file: " & ex.Message)
+                    Return False
+
+                End Try
+        End Select
+
+    End Function
+    Private Sub CSV_Checker_Click(sender As Object, e As EventArgs) Handles CSV_Checker.Click
+        If CSVReader() = False Then
+            Exit Sub
+        End If
+
+        MessageBox.Show("Proses csv checker sudah berhasil. Harap check folder D:/LogPCG_Dump")
     End Sub
     'Private Sub BGWorker_CheckPrice_RunWorkerCompleted(sender As Object, e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BGWorker_CheckPrice.RunWorkerCompleted
     '    ResetUIAndShowCompletionMessage()
