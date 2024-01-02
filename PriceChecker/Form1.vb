@@ -289,6 +289,7 @@ Public Class Form1
                         sb.AppendLine("PLU JUAL - PLU RESEP")
                         For i As Integer = 0 To dt.Rows.Count - 1
                             cmd.CommandText = $"SELECT GROUP_CONCAT(rmplu) FROM recipe WHERE plu = '{dt.Rows(i)("plu")}';"
+
                             rmplu = "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'"
 
                             cmd.CommandText = $"SELECT COUNT(rmplu) FROM recipe WHERE plu ='{dt.Rows(i)("plu")}';"
@@ -296,7 +297,9 @@ Public Class Form1
 
                             cmd.CommandText = $"SELECT COUNT(prdcd) FROM prodmast WHERE prdcd IN ({rmplu});"
                             If total_rmplu <> cmd.ExecuteScalar Then
-                                sb.AppendLine(dt.Rows(i)("plu").ToString() & " - " & rmplu)
+                                cmd.CommandText = $"SELECT GROUP_CONCAT(rmplu) FROM recipe WHERE plu = '{dt.Rows(i)("plu")}' AND rmplu NOT IN (SELECT prdcd FROM prodmast);"
+
+                                sb.AppendLine(dt.Rows(i)("plu").ToString() & " - " & "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'")
                             Else
                                 cmd.CommandText = $"INSERT INTO recipe_pricechecker 
                                     SELECT r.recid, r.plu, r.rmplu, p.desc2, r.qty, p.unit, p.acost, 
