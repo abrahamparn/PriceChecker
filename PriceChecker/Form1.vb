@@ -5,11 +5,13 @@ Imports System.Globalization
 Imports MySql.Data.MySqlClient
 
 Public Class Form1
+    ' Notes. karena simulasi, update row id di matiin. Fungsi write to file di gabungin ke 
     Private stopwatch As New Stopwatch()
+    Private whichFunction As Integer
 
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         addToConstCRI()
-        ' InitializeProgressBar() '
+        ' InitializeProgressBar()
     End Sub
     'Private Sub Timer_CheckPrice_Tick(sender As Object, e As EventArgs) Handles Timer_CheckPrice.Tick
     '    ' Reset progress bar when the timer ticks
@@ -22,16 +24,16 @@ Public Class Form1
     '        BGWorker_CheckPrice.RunWorkerAsync()
     '    End If
     'End Sub
-    Private Sub InitializeProgressBar()
-        ProgressBar1.Maximum = 6000 ' Set this to the same value as the timer interval
-        ProgressBar1.Step = 1
-        stopwatch.Start() ' Start the stopwatch
-        ' Start a timer to update the progress bar
-        Dim progressTimer As New Timer()
-        AddHandler progressTimer.Tick, AddressOf UpdateProgressBar
-        progressTimer.Interval = 1 ' Update progress every millisecond
-        progressTimer.Start()
-    End Sub
+    'Private Sub InitializeProgressBar()
+    '    ProgressBar1.Maximum = 6000 ' Set this to the same value as the timer interval
+    '    ProgressBar1.Step = 1
+    '    stopwatch.Start() ' Start the stopwatch
+    '    ' Start a timer to update the progress bar
+    '    Dim progressTimer As New Timer()
+    '    AddHandler progressTimer.Tick, AddressOf UpdateProgressBar
+    '    progressTimer.Interval = 1 ' Update progress every millisecond
+    '    progressTimer.Start()
+    'End Sub
 
     Private Sub UpdateProgressBar(sender As Object, e As EventArgs)
         ' Update the progress bar based on the stopwatch elapsed time
@@ -46,6 +48,20 @@ Public Class Form1
     End Sub
 
     Private Sub BGWorker_CheckPrice_DoWork(sender As Object, e As System.ComponentModel.DoWorkEventArgs) Handles BGWorker_CheckPrice.DoWork
+        If whichFunction = 1 Then
+            priceChecker()
+        ElseIf whichFunction = 2 Then
+            RecipeCheckerSub()
+        End If
+    End Sub
+
+    Private Sub priceChecker()
+        Dim sb As New System.Text.StringBuilder
+        Dim dt As New DataTable
+
+        sb.AppendLine("Daftar Harga yang Berbeda di STMAST")
+        sb.AppendLine()
+        sb.AppendLine("PLU - Nama Barang - RowId")
         Using connection As MySqlConnection = MasterMcon.Clone()
             If connection.State = ConnectionState.Closed Then
                 connection.Open()
@@ -55,26 +71,7 @@ Public Class Form1
             Dim startRowId As Integer = Convert.ToDecimal(GetStartingRowId())
 
             ' Query to get records from mtran where rowId > startRowId
-            'Dim query As String = $"
-
-            'SELECT 
-            '    prodmast.desc2, 
-            '    mtran.plu, 
-            '    mtran.rowid
-            'FROM mtran 
-            'INNER JOIN prodmast ON prodmast.prdcd = mtran.plu 
-            'WHERE 
-            '    mtran.rtype = 'J' AND mtran.rowid > {startRowId} AND  
-            '    ((mtran.gross_dpp+mtran.PPN ) / mtran.qty) > mtran.price AND
-            '     prodmast.BKP = 'Y' AND 
-            '    prodmast.SUB_BKP NOT IN ('A', 'B', 'D', 'L', 'P', 'R', 'S', 'T', 'W', 'G')
-            'GROUP BY mtran.docno, mtran.plu, mtran.shift, mtran.station, mtran.tanggal
-            '     ORDER BY mtran.rowId ASC
-
-            '"
-
             Dim query As String = $"
-           
             SELECT 
                 prodmast.desc2, 
                 mtran.plu, 
@@ -88,7 +85,6 @@ Public Class Form1
                 prodmast.SUB_BKP NOT IN ('A', 'B', 'D', 'L', 'P', 'R', 'S', 'T', 'W', 'G')
             GROUP BY mtran.docno, mtran.plu, mtran.shift, mtran.station, mtran.tanggal
                  ORDER BY mtran.rowId ASC
-            
             "
 
             Try
@@ -99,13 +95,15 @@ Public Class Form1
                                 Dim plu As String = reader("plu").ToString()
                                 Dim desc2 As String = reader("desc2").ToString()
                                 Dim rowId As Decimal = Convert.ToDecimal(reader("rowid"))
-                                WriteToFile(plu, desc2, rowId)
+                                sb.AppendLine($"{plu}, {desc2}, {rowId}")
                                 Debug.WriteLine(plu)
 
                                 ' Update last processed rowId
-                                UpdateLastProcessedRowId(rowId)
+                                ' UpdateLastProcessedRowId(rowId)
                             End While
                         End Using
+                        WritingLogToFile("PriceChecker", sb.ToString())
+
                     Catch ex As Exception
                         Debug.WriteLine(ex.Message)
                         TraceLog(ex.Message)
@@ -130,7 +128,6 @@ Public Class Form1
 
                 Using command As New MySqlCommand()
                     command.Connection = connection
-
                     command.CommandText = "SELECT COUNT(*) FROM const WHERE rkey = 'CRI'"
                     Dim count As Integer = Convert.ToInt32(command.ExecuteScalar())
 
@@ -203,26 +200,8 @@ Public Class Form1
         End Try
     End Sub
 
-    Private Sub WriteToFile(plu As String, desc2 As String, rowId As Integer)
-        Try
-            Dim culture As New CultureInfo("id-ID")
-            Dim dateString = DateTime.Now.ToString("ddMMMMyyyy", culture)
-            Dim documentsPath As String = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-            Dim filePath As String = Path.Combine(documentsPath, $"CheckPriceResult_{dateString}.txt")
-
-            ' Append the plu to the file
-            Using writer As New StreamWriter(filePath, True) ' True to append data
-                writer.WriteLine($"{plu}, {desc2}, {rowId}")
-            End Using
-        Catch ex As Exception
-            Debug.WriteLine(ex.Message)
-            TraceLog(ex.Message)
-            MsgBox(ex.Message)
-
-        End Try
-    End Sub
-
     Private Sub DoCalculation_Click(sender As Object, e As EventArgs) Handles DoCalculation.Click
+        whichFunction = 1 'to call background worker
         stopwatch.Stop()
         stopwatch.Reset()
         ProgressBar1.Value = 0
@@ -249,6 +228,26 @@ Public Class Form1
     End Sub
 
     Private Sub RecipeChecker_Click(sender As Object, e As EventArgs) Handles RecipeChecker.Click
+        whichFunction = 2 'to call background worker
+        stopwatch.Stop()
+        stopwatch.Reset()
+        ProgressBar1.Value = 0
+
+        ProgressBar1.Maximum = 2500
+        ProgressBar1.Step = 1
+        stopwatch.Start()
+        Dim progressTimer As New Timer()
+        AddHandler progressTimer.Tick, AddressOf UpdateProgressBar
+
+        progressTimer.Interval = 1 ' Update progress every millisecond
+        progressTimer.Start()
+        If Not BGWorker_CheckPrice.IsBusy Then
+            BGWorker_CheckPrice.RunWorkerAsync()
+        End If
+
+    End Sub
+
+    Private Sub RecipeCheckerSub()
         Dim da As New MySqlDataAdapter
         Dim dt As New DataTable
         Dim rmplu As String = ""
@@ -342,7 +341,6 @@ Public Class Form1
 
                         WritingLogToFile("PLU_HPP-VS-PRICE", sb.ToString())
 
-                        MsgBox("Finish Check Price!")
 
                     Catch ex As Exception
                         TraceLog(ex.Message)
@@ -352,6 +350,7 @@ Public Class Form1
                 connection.Close()
             End Using
         Catch ex As Exception
+            TraceLog(ex.Message)
             MsgBox(ex.Message)
         End Try
     End Sub
@@ -360,8 +359,14 @@ Public Class Form1
         Try
             Dim culture As New CultureInfo("id-ID")
             Dim dateString = DateTime.Now.ToString("ddMMMMyyyy", culture)
-            Dim documentsPath As String = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-            Dim filePath As String = Path.Combine(documentsPath, $"{title}_{dateString}.txt")
+            Dim folderPath As String = "D:\LogPCG_Dump"
+
+            ' Check the folder 
+            If Not System.IO.Directory.Exists(folderPath) = True Then
+                System.IO.Directory.CreateDirectory(folderPath)
+            End If
+
+            Dim filePath As String = Path.Combine(folderPath, $"{title}_{dateString}.txt")
 
             If System.IO.File.Exists(filePath) = True Then
                 System.IO.File.Delete(filePath)
@@ -375,7 +380,35 @@ Public Class Form1
             Debug.WriteLine(ex.Message)
             TraceLog(ex.Message)
             MsgBox(ex.Message)
+        End Try
+    End Sub
 
+    ' Fungsi ini di panggil kalo sudah melewati simulasi, gak boleh di hapus file nya karena row idnya di track. 
+    Private Sub WritingLogToFilePriceChecker(title As String, content As String)
+        Try
+            Dim culture As New CultureInfo("id-ID")
+            Dim dateString = DateTime.Now.ToString("ddMMMMyyyy", culture)
+            Dim folderPath As String = "D:\LogPCG_Dump"
+
+            ' Check the folder 
+            If Not System.IO.Directory.Exists(folderPath) = True Then
+                System.IO.Directory.CreateDirectory(folderPath)
+            End If
+
+            Dim filePath As String = Path.Combine(folderPath, $"{title}_{dateString}.txt")
+
+            'If System.IO.File.Exists(filePath) = True Then
+            '    System.IO.File.Delete(filePath)
+            'End If
+
+            ' Append the plu to the file
+            Using writer As New StreamWriter(filePath, True)
+                writer.WriteLine($"{content}")
+            End Using
+        Catch ex As Exception
+            Debug.WriteLine(ex.Message)
+            TraceLog(ex.Message)
+            MsgBox(ex.Message)
         End Try
     End Sub
     'Private Sub BGWorker_CheckPrice_RunWorkerCompleted(sender As Object, e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BGWorker_CheckPrice.RunWorkerCompleted
