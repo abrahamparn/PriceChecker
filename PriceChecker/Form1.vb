@@ -55,6 +55,24 @@ Public Class Form1
             Dim startRowId As Integer = Convert.ToDecimal(GetStartingRowId())
 
             ' Query to get records from mtran where rowId > startRowId
+            'Dim query As String = $"
+
+            'SELECT 
+            '    prodmast.desc2, 
+            '    mtran.plu, 
+            '    mtran.rowid
+            'FROM mtran 
+            'INNER JOIN prodmast ON prodmast.prdcd = mtran.plu 
+            'WHERE 
+            '    mtran.rtype = 'J' AND mtran.rowid > {startRowId} AND  
+            '    ((mtran.gross_dpp+mtran.PPN ) / mtran.qty) > mtran.price AND
+            '     prodmast.BKP = 'Y' AND 
+            '    prodmast.SUB_BKP NOT IN ('A', 'B', 'D', 'L', 'P', 'R', 'S', 'T', 'W', 'G')
+            'GROUP BY mtran.docno, mtran.plu, mtran.shift, mtran.station, mtran.tanggal
+            '     ORDER BY mtran.rowId ASC
+
+            '"
+
             Dim query As String = $"
            
             SELECT 
@@ -65,7 +83,7 @@ Public Class Form1
             INNER JOIN prodmast ON prodmast.prdcd = mtran.plu 
             WHERE 
                 mtran.rtype = 'J' AND mtran.rowid > {startRowId} AND  
-                ((mtran.gross_dpp+mtran.PPN ) / mtran.qty) > mtran.price AND
+                mtran.hpp > mtran.price AND
                  prodmast.BKP = 'Y' AND 
                 prodmast.SUB_BKP NOT IN ('A', 'B', 'D', 'L', 'P', 'R', 'S', 'T', 'W', 'G')
             GROUP BY mtran.docno, mtran.plu, mtran.shift, mtran.station, mtran.tanggal
@@ -228,6 +246,137 @@ Public Class Form1
         stopwatch.Reset()
 
         MessageBox.Show("Background worker has completed its task.", "Task Completed", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
+
+    Private Sub RecipeChecker_Click(sender As Object, e As EventArgs) Handles RecipeChecker.Click
+        Dim da As New MySqlDataAdapter
+        Dim dt As New DataTable
+        Dim rmplu As String = ""
+        Dim total_rmplu As Integer = 0
+        Dim sb As New System.Text.StringBuilder
+        Try
+            Using connection As MySqlConnection = MasterMcon.Clone()
+                If connection.State = ConnectionState.Closed Then
+                    connection.Open()
+                End If
+
+                Using cmd As New MySqlCommand("", connection)
+                    Try
+                        cmd.CommandText = "Drop table if exists recipe_pricechecker; "
+                        cmd.CommandText &= $"
+                            CREATE TABLE `recipe_pricechecker` (
+                              `RECID` CHAR(1) NOT NULL DEFAULT '',
+                              `PLU` VARCHAR(8) NOT NULL DEFAULT '',
+                              `RMPLU` VARCHAR(8) NOT NULL DEFAULT '',
+                              `DESKRIPSI_RESEP` VARCHAR(50) NOT NULL DEFAULT '',
+                              `QTY` DECIMAL(7,2) NOT NULL DEFAULT '0.00',
+                              `UNIT` VARCHAR(4) DEFAULT NULL,
+                              `ACOST` DECIMAL(15,6) DEFAULT '0.000000',
+                              `TOTAL_HPP` DECIMAL(15,6) DEFAULT '0.000000',
+                              `BKP` ENUM('N','Y') DEFAULT 'N',
+                              `SUB_BKP` CHAR(1) DEFAULT NULL,
+                              `FLAGPROD` VARCHAR(2000) DEFAULT NULL,
+                              PRIMARY KEY (`PLU`,`RMPLU`)
+                            ) ENGINE=INNODB DEFAULT CHARSET=latin1;
+                        "
+                        cmd.ExecuteNonQuery()
+
+                        cmd.CommandText = $"Select distinct plu from recipe; "
+                        da.SelectCommand = cmd
+                        da.Fill(dt)
+
+                        sb.AppendLine("Daftar PLU yang Hilang di Prodmast")
+                        sb.AppendLine()
+                        sb.AppendLine("PLU JUAL - PLU RESEP")
+                        For i As Integer = 0 To dt.Rows.Count - 1
+                            cmd.CommandText = $"SELECT GROUP_CONCAT(rmplu) FROM recipe WHERE plu = '{dt.Rows(i)("plu")}';"
+                            rmplu = "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'"
+
+                            cmd.CommandText = $"SELECT COUNT(rmplu) FROM recipe WHERE plu ='{dt.Rows(i)("plu")}';"
+                            total_rmplu = cmd.ExecuteScalar
+
+                            cmd.CommandText = $"SELECT COUNT(prdcd) FROM prodmast WHERE prdcd IN ({rmplu});"
+                            If total_rmplu <> cmd.ExecuteScalar Then
+                                sb.AppendLine(dt.Rows(i)("plu").ToString() & " - " & rmplu)
+                            Else
+                                cmd.CommandText = $"INSERT INTO recipe_pricechecker 
+                                    SELECT r.recid, r.plu, r.rmplu, p.desc2, r.qty, p.unit, p.acost, 
+                                    (p.acost * r.qty) total_hpp, p.bkp, p.sub_bkp,
+                                    p.flagprod 
+                                    FROM recipe r INNER JOIN prodmast p ON r.rmplu = p.prdcd
+                                    WHERE p.recid = '' AND p.bkp = 'Y' AND 
+                                    p.sub_bkp NOT IN ('A', 'B', 'D', 'L', 'P', 'R', 'S', 'T', 'W', 'G')
+                                    AND r.plu = '{dt.Rows(i)("plu").ToString}';
+                                    "
+                                cmd.ExecuteNonQuery()
+                            End If
+                        Next
+
+                        WritingLogToFile("RMPLU_HILANG", sb.ToString())
+
+                        cmd.CommandText = $"
+                            SELECT t.plu, SUM(t.total_hpp) total_hpp, p.price, p.desc2,
+                            (CASE WHEN SUM(t.total_hpp) > p.price THEN 1
+                            ELSE 0
+                            END ) AS result
+                            FROM recipe_pricechecker t INNER JOIN prodmast p ON t.plu = p.prdcd
+                            WHERE p.recid = '' 
+                            GROUP BY t.plu;
+                            "
+                        Dim dt_result As New DataTable
+                        da.SelectCommand = cmd
+                        da.Fill(dt_result)
+
+                        sb = New System.Text.StringBuilder
+                        sb.AppendLine("Daftar PLU Resep HPP > Harga Jual")
+                        sb.AppendLine()
+                        sb.AppendLine("PRDCD - Deskripsi - Total HPP Resep - Harga Jual ")
+                        For j As Integer = 0 To dt_result.Rows.Count - 1
+                            If dt_result.Rows(j)("total_hpp") > dt_result.Rows(j)("price") Then
+                                sb.AppendLine(dt_result.Rows(j)("plu") & " - " &
+                                    dt_result.Rows(j)("desc2") & " - " &
+                                    dt_result.Rows(j)("total_hpp") & " - " &
+                                    dt_result.Rows(j)("price"))
+                            End If
+                        Next
+
+                        WritingLogToFile("PLU_HPP-VS-PRICE", sb.ToString())
+
+                        MsgBox("Finish Check Price!")
+
+                    Catch ex As Exception
+                        TraceLog(ex.Message)
+                        MsgBox(ex.Message)
+                    End Try
+                End Using
+                connection.Close()
+            End Using
+        Catch ex As Exception
+            MsgBox(ex.Message)
+        End Try
+    End Sub
+
+    Private Sub WritingLogToFile(title As String, content As String)
+        Try
+            Dim culture As New CultureInfo("id-ID")
+            Dim dateString = DateTime.Now.ToString("ddMMMMyyyy", culture)
+            Dim documentsPath As String = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+            Dim filePath As String = Path.Combine(documentsPath, $"{title}_{dateString}.txt")
+
+            If System.IO.File.Exists(filePath) = True Then
+                System.IO.File.Delete(filePath)
+            End If
+
+            ' Append the plu to the file
+            Using writer As New StreamWriter(filePath, True)
+                writer.WriteLine($"{content}")
+            End Using
+        Catch ex As Exception
+            Debug.WriteLine(ex.Message)
+            TraceLog(ex.Message)
+            MsgBox(ex.Message)
+
+        End Try
     End Sub
     'Private Sub BGWorker_CheckPrice_RunWorkerCompleted(sender As Object, e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BGWorker_CheckPrice.RunWorkerCompleted
     '    ResetUIAndShowCompletionMessage()

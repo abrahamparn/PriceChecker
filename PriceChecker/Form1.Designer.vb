@@ -27,6 +27,7 @@ Partial Class Form1
         Me.Timer_CheckPrice = New System.Windows.Forms.Timer(Me.components)
         Me.ProgressBar1 = New System.Windows.Forms.ProgressBar()
         Me.DoCalculation = New System.Windows.Forms.Button()
+        Me.RecipeChecker = New System.Windows.Forms.Button()
         Me.SuspendLayout()
         '
         'BGWorker_CheckPrice
@@ -58,11 +59,24 @@ Partial Class Form1
         Me.DoCalculation.Text = "Do Calculation"
         Me.DoCalculation.UseVisualStyleBackColor = True
         '
+        'RecipeChecker
+        '
+        Me.RecipeChecker.Anchor = CType((((System.Windows.Forms.AnchorStyles.Top Or System.Windows.Forms.AnchorStyles.Bottom) _
+            Or System.Windows.Forms.AnchorStyles.Left) _
+            Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
+        Me.RecipeChecker.Location = New System.Drawing.Point(276, 249)
+        Me.RecipeChecker.Name = "RecipeChecker"
+        Me.RecipeChecker.Size = New System.Drawing.Size(116, 43)
+        Me.RecipeChecker.TabIndex = 2
+        Me.RecipeChecker.Text = "Recipe Checker"
+        Me.RecipeChecker.UseVisualStyleBackColor = True
+        '
         'Form1
         '
         Me.AutoScaleDimensions = New System.Drawing.SizeF(6.0!, 13.0!)
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.ClientSize = New System.Drawing.Size(800, 450)
+        Me.Controls.Add(Me.RecipeChecker)
         Me.Controls.Add(Me.DoCalculation)
         Me.Controls.Add(Me.ProgressBar1)
         Me.Name = "Form1"
@@ -75,4 +89,5 @@ Partial Class Form1
     Friend WithEvents Timer_CheckPrice As Timer
     Friend WithEvents ProgressBar1 As ProgressBar
     Friend WithEvents DoCalculation As Button
+    Friend WithEvents RecipeChecker As Button
 End Class
