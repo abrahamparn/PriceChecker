@@ -3,7 +3,7 @@ Imports IDM.Fungsi
 
 Module InitializationProject
     Public MasterMcon As MySqlConnection
-    Public isSector As Boolean = True
+    Public isSector As Boolean = False
     Friend a As New IDM.Sector
     Friend MyKey As String = "7F32DF687D8B7D21437963307AFB66CB"
 

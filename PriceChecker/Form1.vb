@@ -516,7 +516,7 @@ Public Class Form1
                         connection.Close()
                     End Using
 
-                    'IO.File.Delete(files(0)) enable thisl ater
+                    'IO.File.Delete(files(0)) enable this later
                     Return True
                 Catch ex As Exception
                     MessageBox.Show("Error reading the CSV file: " & ex.Message)
@@ -531,8 +531,91 @@ Public Class Form1
         If CSVReader() = False Then
             Exit Sub
         End If
+        CSVCheckPluBahanBaku()
 
         MessageBox.Show("Proses csv checker sudah berhasil. Harap check folder D:/LogPCG_Dump")
+    End Sub
+
+    Private Sub CSVCheckPluBahanBaku()
+        Dim da As New MySqlDataAdapter
+        Dim dt As New DataTable
+        Dim rmplu As String = ""
+        Dim total_rmplu As Integer = 0
+        Dim sb As New System.Text.StringBuilder
+        Try
+            Using connection As MySqlConnection = MasterMcon.Clone()
+                If connection.State = ConnectionState.Closed Then
+                    connection.Open()
+                End If
+
+                Using cmd As New MySqlCommand("", connection)
+                    Try
+                        cmd.CommandText = "DELETE FROM resepMasterTemp WHERE plu_bahan_baku = '-' OR plu_bahan_baku = '' OR plu_bahan_baku = ' ';"
+                        cmd.ExecuteScalar()
+
+                        cmd.CommandText = $"Select distinct PLU_JUAL from resepMasterTemp; "
+                        da.SelectCommand = cmd
+                        da.Fill(dt)
+
+                        sb.AppendLine("Daftar PLU yang Hilang di Prodmast berdasarkan CSV")
+                        sb.AppendLine()
+                        sb.AppendLine("PLU JUAL - PLU RESEP")
+                        For i As Integer = 0 To dt.Rows.Count - 1
+                            cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}';"
+
+                            rmplu = "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'"
+
+                            cmd.CommandText = $"SELECT COUNT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL ='{dt.Rows(i)("PLU_JUAL")}';"
+                            total_rmplu = cmd.ExecuteScalar
+
+                            cmd.CommandText = $"SELECT COUNT(prdcd) FROM prodmast WHERE prdcd IN ({rmplu});"
+                            If total_rmplu <> cmd.ExecuteScalar Then
+                                cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp " +
+                                                  $"WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}' " +
+                                                  $"And PLU_BAHAN_BAKU Not IN (SELECT prdcd FROM prodmast) ;"
+
+
+                                sb.AppendLine(dt.Rows(i)("PLU_JUAL").ToString() & " - " & "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'")
+
+                            End If
+                        Next
+                        sb.AppendLine()
+                        sb.AppendLine()
+                        sb.AppendLine("Daftar PLU yang Hilang di konversi_plu berdasarkan CSV")
+                        sb.AppendLine()
+                        sb.AppendLine("PLU JUAL - PLU RESEP")
+                        For i As Integer = 0 To dt.Rows.Count - 1
+                            cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}';"
+
+                            rmplu = "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'"
+
+                            cmd.CommandText = $"SELECT COUNT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL ='{dt.Rows(i)("PLU_JUAL")}';"
+                            total_rmplu = cmd.ExecuteScalar
+
+                            cmd.CommandText = $"SELECT COUNT(plu_konv) FROM konversi_plu WHERE plu_konv IN ({rmplu});"
+                            If total_rmplu > cmd.ExecuteScalar Then
+                                cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp " +
+                                                  $"WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}' " +
+                                                  $"And PLU_BAHAN_BAKU Not IN (SELECT plu_konv FROM konversi_plu) ;"
+
+
+                                sb.AppendLine(dt.Rows(i)("PLU_JUAL").ToString() & " - " & "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'")
+
+                            End If
+                        Next
+
+                        WritingLogToFile("PLU_BAHAN_BAKU_HILANG", sb.ToString())
+                    Catch ex As Exception
+                        TraceLog(ex.Message)
+                        MsgBox(ex.Message)
+                    End Try
+                End Using
+                connection.Close()
+            End Using
+        Catch ex As Exception
+            TraceLog(ex.Message)
+            MsgBox(ex.Message)
+        End Try
     End Sub
     'Private Sub BGWorker_CheckPrice_RunWorkerCompleted(sender As Object, e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BGWorker_CheckPrice.RunWorkerCompleted
     '    ResetUIAndShowCompletionMessage()
