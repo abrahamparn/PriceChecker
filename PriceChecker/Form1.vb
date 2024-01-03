@@ -48,11 +48,35 @@ Public Class Form1
         End If
     End Sub
 
+    Private Sub doWorkNow()
+        stopwatch.Stop()
+        stopwatch.Reset()
+        ProgressBar1.Value = 0
+
+        ProgressBar1.Maximum = 2500
+        ProgressBar1.Step = 1
+        stopwatch.Start()
+        Dim progressTimer As New Timer()
+        AddHandler progressTimer.Tick, AddressOf UpdateProgressBar
+
+        progressTimer.Interval = 1 ' Update progress every millisecond
+        progressTimer.Start()
+        If Not BGWorker_CheckPrice.IsBusy Then
+            BGWorker_CheckPrice.RunWorkerAsync()
+        End If
+    End Sub
+
     Private Sub BGWorker_CheckPrice_DoWork(sender As Object, e As System.ComponentModel.DoWorkEventArgs) Handles BGWorker_CheckPrice.DoWork
         If whichFunction = 1 Then
             priceChecker()
         ElseIf whichFunction = 2 Then
             RecipeCheckerSub()
+        ElseIf whichFunction = 3 Then
+            If CSVReader() = False Then
+                Exit Sub
+            End If
+            CSVCheckPluBahanBaku()
+            checkPluAsalDanAcost()
         End If
     End Sub
 
@@ -203,21 +227,7 @@ Public Class Form1
 
     Private Sub DoCalculation_Click(sender As Object, e As EventArgs) Handles DoCalculation.Click
         whichFunction = 1 'to call background worker
-        stopwatch.Stop()
-        stopwatch.Reset()
-        ProgressBar1.Value = 0
-
-        ProgressBar1.Maximum = 2500
-        ProgressBar1.Step = 1
-        stopwatch.Start()
-        Dim progressTimer As New Timer()
-        AddHandler progressTimer.Tick, AddressOf UpdateProgressBar
-
-        progressTimer.Interval = 1 ' Update progress every millisecond
-        progressTimer.Start()
-        If Not BGWorker_CheckPrice.IsBusy Then
-            BGWorker_CheckPrice.RunWorkerAsync()
-        End If
+        doWorkNow()
     End Sub
     Private Sub ResetUIAndShowCompletionMessage()
 
@@ -230,21 +240,7 @@ Public Class Form1
 
     Private Sub RecipeChecker_Click(sender As Object, e As EventArgs) Handles RecipeChecker.Click
         whichFunction = 2 'to call background worker
-        stopwatch.Stop()
-        stopwatch.Reset()
-        ProgressBar1.Value = 0
-
-        ProgressBar1.Maximum = 2500
-        ProgressBar1.Step = 1
-        stopwatch.Start()
-        Dim progressTimer As New Timer()
-        AddHandler progressTimer.Tick, AddressOf UpdateProgressBar
-
-        progressTimer.Interval = 1 ' Update progress every millisecond
-        progressTimer.Start()
-        If Not BGWorker_CheckPrice.IsBusy Then
-            BGWorker_CheckPrice.RunWorkerAsync()
-        End If
+        doWorkNow()
 
     End Sub
 
@@ -528,12 +524,10 @@ Public Class Form1
 
     End Function
     Private Sub CSV_Checker_Click(sender As Object, e As EventArgs) Handles CSV_Checker.Click
-        If CSVReader() = False Then
-            Exit Sub
-        End If
-        CSVCheckPluBahanBaku()
 
-        MessageBox.Show("Proses csv checker sudah berhasil. Harap check folder D:/LogPCG_Dump")
+        whichFunction = 3
+        doWorkNow()
+
     End Sub
 
     Private Sub CSVCheckPluBahanBaku()
@@ -574,7 +568,6 @@ Public Class Form1
                                                   $"WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}' " +
                                                   $"And PLU_BAHAN_BAKU Not IN (SELECT prdcd FROM prodmast) ;"
 
-
                                 sb.AppendLine(dt.Rows(i)("PLU_JUAL").ToString() & " - " & "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'")
 
                             End If
@@ -605,6 +598,83 @@ Public Class Form1
                         Next
 
                         WritingLogToFile("PLU_BAHAN_BAKU_HILANG", sb.ToString())
+                    Catch ex As Exception
+                        TraceLog(ex.Message)
+                        MsgBox(ex.Message)
+                    End Try
+                End Using
+                connection.Close()
+            End Using
+        Catch ex As Exception
+            TraceLog(ex.Message)
+            MsgBox(ex.Message)
+        End Try
+    End Sub
+
+    Private Sub checkPluAsalDanAcost()
+        Dim da As New MySqlDataAdapter
+        Dim dt As New DataTable
+        Dim rmplu As String = ""
+        Dim total_rmplu As Integer = 0
+                Dim ab As New System.Text.StringBuilder
+
+        Dim sb As New System.Text.StringBuilder
+        Try
+            Using connection As MySqlConnection = MasterMcon.Clone()
+                If connection.State = ConnectionState.Closed Then
+                    connection.Open()
+                End If
+
+                Using cmd As New MySqlCommand("", connection)
+                    Try
+                        cmd.CommandText = "DELETE FROM resepMasterTemp WHERE plu_bahan_baku = '-' OR plu_bahan_baku = '' OR plu_bahan_baku = ' ';"
+                        cmd.ExecuteScalar()
+                        cmd.CommandText = $"SELECT 
+                                                DISTINCT r.PLU_BAHAN_BAKU, 
+                                                b.plu_konv, 
+                                                b.plu_asal, 
+                                                p.prdcd AS prdcd_asal, 
+                                                p.acost/b.nilai AS hasilBagi_asal, 
+                                                z.plu_konv_acost
+                                            FROM resepMasterTemp AS r
+                                            INNER JOIN konversi_plu AS b ON r.PLU_BAHAN_BAKU = b.plu_konv 
+                                            INNER JOIN prodmast AS p ON b.plu_asal = p.prdcd
+                                            INNER JOIN (
+                                                SELECT 
+                                                    r_inner.PLU_BAHAN_BAKU, 
+                                                    acost AS plu_konv_acost
+                                                FROM resepMasterTemp AS r_inner
+                                                INNER JOIN konversi_plu AS b_inner ON r_inner.PLU_BAHAN_BAKU = b_inner.plu_konv 
+                                                INNER JOIN prodmast AS p_inner ON b_inner.plu_konv = p_inner.prdcd
+                                                GROUP BY r_inner.PLU_BAHAN_BAKU
+                                            ) AS z ON z.PLU_BAHAN_BAKU = r.PLU_BAHAN_BAKU"
+
+                        da.SelectCommand = cmd
+                        da.Fill(dt)
+                        sb.AppendLine("Inserting where acost is not the same as acost_awal/nilai_awal")
+                        sb.AppendLine()
+                        sb.AppendLine("PLU_BAHAN_BAKU|plu_konv|plu_asal|prdcd_asal|hasilBagi_asal|plu_konv_acost")
+                        ab.AppendLine("Inserting query to recipe where acost is the same as acost_awal/nilai_awal")
+                        ab.AppendLine()
+                        For i As Integer = 0 To dt.Rows.Count - 1
+                            If Math.Round(Convert.ToDecimal(dt.Rows(i)("hasilBagi_asal")), 3) <> Math.Round(Convert.ToDecimal(dt.Rows(i)("plu_konv_acost")), 3) Then
+
+
+                                sb.AppendLine($"{dt.Rows(i)("PLU_BAHAN_BAKU").ToString()}|{dt.Rows(i)("plu_konv").ToString()}|{dt.Rows(i)("plu_asal").ToString()}|{dt.Rows(i)("prdcd_asal").ToString()}|{dt.Rows(i)("hasilBagi_asal").ToString()}|{dt.Rows(i)("plu_konv_acost").ToString()}")
+                            Else
+                                cmd.CommandText = $"
+                                SELECT CONCAT('INSERT INTO recipe (plu, rmplu, qty, addtime) VALUES (\'', plu_jual, '\', \'', plu_bahan_baku, '\', \'', qty, '\', now());') 
+                                FROM resepMasterTemp 
+                                WHERE plu_bahan_baku = '{dt.Rows(i)("PLU_BAHAN_BAKU")}';                                
+                                "
+                                ab.AppendLine($"{cmd.ExecuteScalar.ToString}")
+
+                            End If
+                        Next
+
+                        WritingLogToFile("Banding_Konv_asal_beda", sb.ToString())
+                        WritingLogToFile("insert_to_recipe_query", ab.ToString())
+
                     Catch ex As Exception
                         TraceLog(ex.Message)
                         MsgBox(ex.Message)
