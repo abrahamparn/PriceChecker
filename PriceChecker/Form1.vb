@@ -12,6 +12,7 @@ Public Class Form1
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         addToConstCRI()
         CheckMasterResepTempTable()
+        CreateFolderMasterResep()
         ' InitializeProgressBar()
     End Sub
     'Private Sub Timer_CheckPrice_Tick(sender As Object, e As EventArgs) Handles Timer_CheckPrice.Tick
@@ -76,7 +77,7 @@ Public Class Form1
                 Exit Sub
             End If
             CSVCheckPluBahanBaku()
-            checkPluAsalDanAcost()
+            ' checkPluAsalDanAcost()
         End If
     End Sub
 
@@ -439,7 +440,13 @@ Public Class Form1
 
         End Try
     End Sub
-
+    Private Sub CreateFolderMasterResep()
+        Dim folderPath As String = "D:\MasterResep"
+        ' Check the folder 
+        If Not System.IO.Directory.Exists(folderPath) = True Then
+            System.IO.Directory.CreateDirectory(folderPath)
+        End If
+    End Sub
     Private Function CSVReader()
         Dim folderPath As String = "D:\MasterResep"
         ' Check the folder 
@@ -451,19 +458,19 @@ Public Class Form1
 
         Select Case files.Length
             Case 0
-                MessageBox.Show("Folder D:\MasterResep tidak boleh kosong. ")
+                MessageBox.Show("Folder D:\MasterResep tidak boleh kosong.")
                 Return False
             Case > 1
                 MessageBox.Show("Folder D:\MasterResep memiliki lebih dari satu file")
                 Return False
             Case 1
                 If Not files(0).EndsWith(".csv") Then
-                    MessageBox.Show("Folder D:\MasterResep hanya boleh menganduk file csv")
+                    MessageBox.Show("Folder D:\MasterResep hanya boleh mengandung file csv")
                     Return False
                 End If
 
                 If files(0).Contains("'") Then
-                    MessageBox.Show($"Nama file tidak boleh menganduk petik tunggal")
+                    MessageBox.Show($"Nama file tidak boleh mengandung petik tunggal")
                     Return False
                 End If
 
@@ -533,6 +540,7 @@ Public Class Form1
     Private Sub CSVCheckPluBahanBaku()
         Dim da As New MySqlDataAdapter
         Dim dt As New DataTable
+        Dim unavailablePluJual As New List(Of String)()
         Dim rmplu As String = ""
         Dim total_rmplu As Integer = 0
         Dim sb As New System.Text.StringBuilder
@@ -544,15 +552,31 @@ Public Class Form1
 
                 Using cmd As New MySqlCommand("", connection)
                     Try
+                        ' process one starts -> Inserting empty PLU_BAHAN_BAKU to the .txt
+                        cmd.CommandText = "select PLU_BAHAN_BAKU, plu_jual from resepMasterTemp WHERE plu_bahan_baku = '-' OR plu_bahan_baku = '' OR plu_bahan_baku = ' ';"
+                        da.SelectCommand = cmd
+                        sb.AppendLine("List PLU jual dari file CSV yang PLU_BAHAN_BAKU nya = '-' OR ' ' OR ''")
+                        sb.AppendLine("PLU_JUAL")
+                        da.Fill(dt) ' Fill DA
+                        For i As Integer = 0 To dt.Rows.Count - 1
+                            sb.AppendLine($"{dt.Rows(i)("PLU_JUAL").ToString()}")
+                            unavailablePluJual.Add(dt.Rows(i)("PLU_JUAL").ToString())
+                        Next
+                        dt.Clear() 'Clear DA
+                        sb.AppendLine()
+                        ' proces one ends
+
+                        ' process two starts -> deleting the empty PLU_BAHAN_BAKU
                         cmd.CommandText = "DELETE FROM resepMasterTemp WHERE plu_bahan_baku = '-' OR plu_bahan_baku = '' OR plu_bahan_baku = ' ';"
                         cmd.ExecuteScalar()
+                        ' process two ends
 
+                        ' process tiga starts -> check apakah masing masing plu bahan baku ada di prodmast, kalo tidak dimasukan ke .txt
                         cmd.CommandText = $"Select distinct PLU_JUAL from resepMasterTemp; "
                         da.SelectCommand = cmd
                         da.Fill(dt)
 
-                        sb.AppendLine("Daftar PLU yang Hilang di Prodmast berdasarkan CSV")
-                        sb.AppendLine()
+                        sb.AppendLine("Daftar PLU_BAHAN_BAKU yang Hilang di Prodmast berdasarkan CSV")
                         sb.AppendLine("PLU JUAL - PLU RESEP")
                         For i As Integer = 0 To dt.Rows.Count - 1
                             cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}';"
@@ -569,13 +593,14 @@ Public Class Form1
                                                   $"And PLU_BAHAN_BAKU Not IN (SELECT prdcd FROM prodmast) ;"
 
                                 sb.AppendLine(dt.Rows(i)("PLU_JUAL").ToString() & " - " & "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'")
-
+                                unavailablePluJual.Add(dt.Rows(i)("PLU_JUAL").ToString())
                             End If
                         Next
                         sb.AppendLine()
-                        sb.AppendLine()
-                        sb.AppendLine("Daftar PLU yang Hilang di konversi_plu berdasarkan CSV")
-                        sb.AppendLine()
+                        ' process tiga ends
+
+                        ' process empat starts -> check apakah ada plu yang hilang di konversi_plu berdasarkan csv
+                        sb.AppendLine("Daftar PLU_BAHAN_BAKU yang Hilang di konversi_plu berdasarkan CSV")
                         sb.AppendLine("PLU JUAL - PLU RESEP")
                         For i As Integer = 0 To dt.Rows.Count - 1
                             cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}';"
@@ -593,9 +618,45 @@ Public Class Form1
 
 
                                 sb.AppendLine(dt.Rows(i)("PLU_JUAL").ToString() & " - " & "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'")
-
+                                unavailablePluJual.Add(dt.Rows(i)("PLU_JUAL").ToString())
                             End If
                         Next
+                        sb.AppendLine()
+                        sb.AppendLine()
+                        ' process empat ends
+
+                        'proses lima starts -> Check apakah ada plu_bahan_baku yang enggak ada di recipe
+                        sb.AppendLine("Daftar PLU_BAHAN_BAKU yang Hilang di table RECIPE berdasarkan CSV")
+                        sb.AppendLine("PLU JUAL - PLU RESEP")
+                        For i As Integer = 0 To dt.Rows.Count - 1
+                            cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}';"
+
+                            rmplu = "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'"
+
+                            cmd.CommandText = $"SELECT COUNT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL ='{dt.Rows(i)("PLU_JUAL")}';"
+                            total_rmplu = cmd.ExecuteScalar
+
+                            cmd.CommandText = $"SELECT COUNT(rmplu) FROM recipe WHERE rmplu IN ({rmplu}) and PLU ='{dt.Rows(i)("PLU_JUAL")}';"
+                            If total_rmplu <> cmd.ExecuteScalar Then
+                                cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp " +
+                                                  $"WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}' " +
+                                                  $"And PLU_BAHAN_BAKU Not IN (SELECT rmplu FROM recipe) ;"
+
+
+                                sb.AppendLine(dt.Rows(i)("PLU_JUAL").ToString() & " - " & "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'")
+                                unavailablePluJual.Add(dt.Rows(i)("PLU_JUAL").ToString())
+                            End If
+                        Next
+                        sb.AppendLine()
+                        sb.AppendLine()
+                        'proses lima ends
+
+                        ' process enam starts -> delete plu_jual yang PLU_BAHAN_BAKU nya enggak ada di prodmast, konvesi_plu, dan di recipe
+                        For i As Integer = 0 To unavailablePluJual.Count - 1
+                            cmd.CommandText = $"DELETE FROM resepMasterTemp WHERE PLU_JUAL = '{unavailablePluJual(i)}';"
+                            cmd.ExecuteScalar()
+                        Next
+                        ' process enam ends
 
                         WritingLogToFile("PLU_BAHAN_BAKU_HILANG", sb.ToString())
                     Catch ex As Exception
@@ -616,7 +677,7 @@ Public Class Form1
         Dim dt As New DataTable
         Dim rmplu As String = ""
         Dim total_rmplu As Integer = 0
-                Dim ab As New System.Text.StringBuilder
+        Dim ab As New System.Text.StringBuilder
 
         Dim sb As New System.Text.StringBuilder
         Try
@@ -627,6 +688,7 @@ Public Class Form1
 
                 Using cmd As New MySqlCommand("", connection)
                     Try
+
                         cmd.CommandText = "DELETE FROM resepMasterTemp WHERE plu_bahan_baku = '-' OR plu_bahan_baku = '' OR plu_bahan_baku = ' ';"
                         cmd.ExecuteScalar()
                         cmd.CommandText = $"SELECT 
@@ -659,7 +721,6 @@ Public Class Form1
                         For i As Integer = 0 To dt.Rows.Count - 1
                             If Math.Round(Convert.ToDecimal(dt.Rows(i)("hasilBagi_asal")), 3) <> Math.Round(Convert.ToDecimal(dt.Rows(i)("plu_konv_acost")), 3) Then
 
-
                                 sb.AppendLine($"{dt.Rows(i)("PLU_BAHAN_BAKU").ToString()}|{dt.Rows(i)("plu_konv").ToString()}|{dt.Rows(i)("plu_asal").ToString()}|{dt.Rows(i)("prdcd_asal").ToString()}|{dt.Rows(i)("hasilBagi_asal").ToString()}|{dt.Rows(i)("plu_konv_acost").ToString()}")
                             Else
                                 cmd.CommandText = $"
@@ -667,7 +728,7 @@ Public Class Form1
                                 FROM resepMasterTemp 
                                 WHERE plu_bahan_baku = '{dt.Rows(i)("PLU_BAHAN_BAKU")}';                                
                                 "
-                                ab.AppendLine($"{cmd.ExecuteScalar.ToString}")
+                                ab.AppendLine($"{cmd.ExecuteScalar.ToString()}")
 
                             End If
                         Next
