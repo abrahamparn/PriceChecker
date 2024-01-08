@@ -13,7 +13,7 @@ Public Class Form1
         addToConstCRI()
         CheckMasterResepTempTable()
         CreateFolderMasterResep()
-        ' InitializeProgressBar()
+        'InitializeProgressBar()
     End Sub
     'Private Sub Timer_CheckPrice_Tick(sender As Object, e As EventArgs) Handles Timer_CheckPrice.Tick
     '    ' Reset progress bar when the timer ticks
@@ -77,7 +77,7 @@ Public Class Form1
                 Exit Sub
             End If
             CSVCheckPluBahanBaku()
-            ' checkPluAsalDanAcost()
+            checkPluAsalDanAcost()
         End If
     End Sub
 
@@ -639,8 +639,9 @@ Public Class Form1
                         sb.AppendLine("Daftar PLU_BAHAN_BAKU yang tidak ada di konversi_plu dan hpp = 0")
                         sb.AppendLine("PLU JUAL - PLU RESEP")
                         For i As Integer = 0 To dt.Rows.Count - 1
-                            cmd.CommandText = $"SELECT  (r.qty * p.acost) as hpp, r.plu_jual, r.plu_bahan_baku FROM resepMasterTemp AS r INNER JOIN prodmast AS p ON p.prdcd = r.plu_bahan_baku  WHERE  r.plu_bahan_baku = '{dt.Rows(i)("PLU_BAHAN_BAKU")}' AND r.plu_jual = '{dt.Rows(i)("PLU_JUAL")}';"
-                            If total_rmplu <= 0 Then
+                            cmd.CommandText = $"SELECT  (r.qty * p.acost) as hpp FROM resepMasterTemp AS r INNER JOIN prodmast AS p ON p.prdcd = r.plu_bahan_baku  WHERE  r.plu_bahan_baku = '{dt.Rows(i)("PLU_BAHAN_BAKU")}' AND r.plu_jual = '{dt.Rows(i)("PLU_JUAL")}';"
+                            If cmd.ExecuteScalar() <= 0 Then
+                                cmd.CommandText = $"SELECT  (r.qty * p.acost) as hpp, r.plu_jual, r.plu_bahan_baku FROM resepMasterTemp AS r INNER JOIN prodmast AS p ON p.prdcd = r.plu_bahan_baku  WHERE  r.plu_bahan_baku = '{dt.Rows(i)("PLU_BAHAN_BAKU")}' AND r.plu_jual = '{dt.Rows(i)("PLU_JUAL")}';"
 
                                 Using reader As MySqlDataReader = cmd.ExecuteReader()
                                     While reader.Read()
@@ -712,46 +713,74 @@ Public Class Form1
 
 
                         cmd.CommandText = $"SELECT 
-                                                DISTINCT r.PLU_BAHAN_BAKU, 
-                                                b.plu_konv, 
-                                                b.plu_asal, 
-                                                p.prdcd AS prdcd_asal, 
-                                                p.acost/b.nilai AS hasilBagi_asal, 
-                                                z.plu_konv_acost
-                                            FROM resepMasterTemp AS r
-                                            INNER JOIN konversi_plu AS b ON r.PLU_BAHAN_BAKU = b.plu_konv 
-                                            INNER JOIN prodmast AS p ON b.plu_asal = p.prdcd
-                                            INNER JOIN (
-                                                SELECT 
-                                                    r_inner.PLU_BAHAN_BAKU, 
-                                                    acost AS plu_konv_acost
-                                                FROM resepMasterTemp AS r_inner
-                                                INNER JOIN konversi_plu AS b_inner ON r_inner.PLU_BAHAN_BAKU = b_inner.plu_konv 
-                                                INNER JOIN prodmast AS p_inner ON b_inner.plu_konv = p_inner.prdcd
-                                                GROUP BY r_inner.PLU_BAHAN_BAKU
-                                            ) AS z ON z.PLU_BAHAN_BAKU = r.PLU_BAHAN_BAKU"
+                                            rMT.PLU_JUAL, 
+                                            rMT.PLU_BAHAN_BAKU, 
+                                            rMT.QTY, 
+                                            COALESCE(
+                                                (SELECT KP.PLU_KONV 
+                                                    FROM konversi_plu AS KP 
+                                                    WHERE rMT.PLU_BAHAN_BAKU = KP.PLU_KONV
+                                                    LIMIT 1),
+                                                    rMT.PLU_BAHAN_BAKU
+                                                ) AS PLU_KONV,
+                                            COALESCE(
+                                                (SELECT MIN(PInner.acost/KPInner.nilai*rMTInner.qty) AS hpp FROM resepMasterTemp AS rMTInner
+                                                INNER JOIN konversi_plu AS KPInner ON rMTInner.plu_bahan_baku = KPInner.PLU_KONV
+                                                INNER JOIN prodmast AS PInner ON KPInner.PLU_ASAL = PInner.prdcd WHERE KPInner.PLU_KONV =  rMT.PLU_BAHAN_BAKU AND rMTInner.PLU_JUAL = rMT.PLU_JUAL),
+                                                (SELECT (rMT.qty * p.acost) FROM prodmast AS p WHERE rMT.PLU_BAHAN_BAKU = p.prdcd)
+                                                ) AS HPP,
+                                                COALESCE(
+                                            (SELECT KPInner.plu_asal 
+                                                FROM resepMasterTemp AS rMTInner
+                                                INNER JOIN konversi_plu AS KPInner ON rMTInner.plu_bahan_baku = KPInner.PLU_KONV
+                                                INNER JOIN prodmast AS PInner ON KPInner.PLU_ASAL = PInner.prdcd 
+                                                WHERE KPInner.PLU_KONV = rMT.PLU_BAHAN_BAKU AND rMTInner.PLU_JUAL = rMT.PLU_JUAL 
+                                                GROUP BY KPInner.plu_asal
+                                                ORDER BY MIN(PInner.acost/KPInner.nilai*rMTInner.qty) 
+                                                LIMIT 1),
+                                            (SELECT p.prdcd FROM prodmast AS p WHERE rMT.PLU_BAHAN_BAKU = p.prdcd)
+                                        ) AS PLU_ASAL,
+                                                COALESCE(
+                                                    (SELECT(r.qty * p.acost) AS HPPRECIPE FROM recipe AS r JOIN prodmast AS p ON r.rmplu = p.prdcd WHERE r.rmplu = rMT.PLU_BAHAN_BAKU AND r.plu = rMT.PLU_JUAL), 
+                                                    (SELECT (rMT.qty * p.acost) FROM prodmast AS p WHERE rMT.PLU_BAHAN_BAKU = p.prdcd)
+    
+                                                    ) AS HPPRECIPE
+                                        FROM 
+                                            resepMasterTemp AS rMT
+                                            "
 
                         da.SelectCommand = cmd
                         da.Fill(dt)
-                        sb.AppendLine("Inserting where acost is not the same as acost_awal/nilai_awal")
+                        sb.AppendLine("Inserting where HPP manual is not the same as HPP Recipe")
                         sb.AppendLine()
-                        sb.AppendLine("PLU_BAHAN_BAKU|plu_konv|plu_asal|prdcd_asal|hasilBagi_asal|plu_konv_acost")
-                        ab.AppendLine("Inserting query to recipe where acost is the same as acost_awal/nilai_awal")
+                        sb.AppendLine("PLU_JUAL|PLU_BAHAN_BAKU|PLU_KONV|HPPMANUAL|HPPRECIPE|PLU_ASAL")
+                        ab.AppendLine("Inserting where HPP manual is not the same as HPP Recipe")
+
                         ab.AppendLine()
+                        Dim insertQuery As New System.Text.StringBuilder("INSERT INTO recipe (plu, rmplu, qty, addtime) VALUES ")
                         For i As Integer = 0 To dt.Rows.Count - 1
-                            If Math.Round(Convert.ToDecimal(dt.Rows(i)("hasilBagi_asal")), 3) <> Math.Round(Convert.ToDecimal(dt.Rows(i)("plu_konv_acost")), 3) Then
+                            If Math.Round(Convert.ToDecimal(dt.Rows(i)("HPP")), 3) <> Math.Round(Convert.ToDecimal(dt.Rows(i)("HPPRECIPE")), 3) Then
 
-                                sb.AppendLine($"{dt.Rows(i)("PLU_BAHAN_BAKU").ToString()}|{dt.Rows(i)("plu_konv").ToString()}|{dt.Rows(i)("plu_asal").ToString()}|{dt.Rows(i)("prdcd_asal").ToString()}|{dt.Rows(i)("hasilBagi_asal").ToString()}|{dt.Rows(i)("plu_konv_acost").ToString()}")
+                                sb.AppendLine($"{dt.Rows(i)("PLU_JUAL").ToString()}|{dt.Rows(i)("PLU_BAHAN_BAKU").ToString()}|{dt.Rows(i)("PLU_KONV").ToString()}|{dt.Rows(i)("HPP").ToString()}|{dt.Rows(i)("HPPRECIPE").ToString()}|{dt.Rows(i)("PLU_ASAL").ToString()}")
                             Else
-                                cmd.CommandText = $"
-                                SELECT CONCAT('INSERT INTO recipe (plu, rmplu, qty, addtime) VALUES (\'', plu_jual, '\', \'', plu_bahan_baku, '\', \'', qty, '\', now());') 
-                                FROM resepMasterTemp 
-                                WHERE plu_bahan_baku = '{dt.Rows(i)("PLU_BAHAN_BAKU")}';                                
-                                "
-                                ab.AppendLine($"{cmd.ExecuteScalar.ToString()}")
+                                ' Append to the INSERT query
+                                insertQuery.Append($"('{dt.Rows(i)("PLU_JUAL")}', '{dt.Rows(i)("PLU_BAHAN_BAKU")}', '{dt.Rows(i)("QTY")}', now())")
 
+                                ' Add a comma except for the last item
+                                If i < dt.Rows.Count - 1 Then
+                                    insertQuery.Append(", ")
+                                End If
                             End If
                         Next
+
+                        ' Check if the insertQuery string ends with a comma and space, and remove it if present
+                        If insertQuery.ToString().EndsWith(", ") Then
+                            insertQuery.Length -= 2 ' Remove the last two characters
+                        End If
+
+                        ' Final query
+                        insertQuery.AppendLine(";")
+                        ab.AppendLine(insertQuery.ToString())
 
                         WritingLogToFile("Banding_Konv_asal_beda", sb.ToString())
                         WritingLogToFile("insert_to_recipe_query", ab.ToString())
