@@ -557,12 +557,12 @@ Public Class Form1
                         da.SelectCommand = cmd
                         sb.AppendLine("List PLU jual dari file CSV yang PLU_BAHAN_BAKU nya = '-' OR ' ' OR ''")
                         sb.AppendLine("PLU_JUAL")
-                        da.Fill(dt) ' Fill DA
+                        da.Fill(dt) ' Fill dt
                         For i As Integer = 0 To dt.Rows.Count - 1
                             sb.AppendLine($"{dt.Rows(i)("PLU_JUAL").ToString()}")
                             unavailablePluJual.Add(dt.Rows(i)("PLU_JUAL").ToString())
                         Next
-                        dt.Clear() 'Clear DA
+                        dt.Clear() 'Clear dt
                         sb.AppendLine()
                         ' proces one ends
 
@@ -599,33 +599,7 @@ Public Class Form1
                         sb.AppendLine()
                         ' process tiga ends
 
-                        ' process empat starts -> check apakah ada plu yang hilang di konversi_plu berdasarkan csv
-                        sb.AppendLine("Daftar PLU_BAHAN_BAKU yang Hilang di konversi_plu berdasarkan CSV")
-                        sb.AppendLine("PLU JUAL - PLU RESEP")
-                        For i As Integer = 0 To dt.Rows.Count - 1
-                            cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}';"
-
-                            rmplu = "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'"
-
-                            cmd.CommandText = $"SELECT COUNT(PLU_BAHAN_BAKU) FROM resepMasterTemp WHERE PLU_JUAL ='{dt.Rows(i)("PLU_JUAL")}';"
-                            total_rmplu = cmd.ExecuteScalar
-
-                            cmd.CommandText = $"SELECT COUNT(plu_konv) FROM konversi_plu WHERE plu_konv IN ({rmplu});"
-                            If total_rmplu > cmd.ExecuteScalar Then
-                                cmd.CommandText = $"SELECT GROUP_CONCAT(PLU_BAHAN_BAKU) FROM resepMasterTemp " +
-                                                  $"WHERE PLU_JUAL = '{dt.Rows(i)("PLU_JUAL")}' " +
-                                                  $"And PLU_BAHAN_BAKU Not IN (SELECT plu_konv FROM konversi_plu) ;"
-
-
-                                sb.AppendLine(dt.Rows(i)("PLU_JUAL").ToString() & " - " & "'" & cmd.ExecuteScalar.ToString.Replace(",", "','") & "'")
-                                unavailablePluJual.Add(dt.Rows(i)("PLU_JUAL").ToString())
-                            End If
-                        Next
-                        sb.AppendLine()
-                        sb.AppendLine()
-                        ' process empat ends
-
-                        'proses lima starts -> Check apakah ada plu_bahan_baku yang enggak ada di recipe
+                        'proses empat starts -> Check apakah ada plu_bahan_baku yang enggak ada di recipe
                         sb.AppendLine("Daftar PLU_BAHAN_BAKU yang Hilang di table RECIPE berdasarkan CSV")
                         sb.AppendLine("PLU JUAL - PLU RESEP")
                         For i As Integer = 0 To dt.Rows.Count - 1
@@ -647,16 +621,63 @@ Public Class Form1
                                 unavailablePluJual.Add(dt.Rows(i)("PLU_JUAL").ToString())
                             End If
                         Next
+                        dt.Clear() 'Clear dt
                         sb.AppendLine()
-                        sb.AppendLine()
-                        'proses lima ends
+                        'proses empat ends
 
-                        ' process enam starts -> delete plu_jual yang PLU_BAHAN_BAKU nya enggak ada di prodmast, konvesi_plu, dan di recipe
+                        ' process lima starts -> delete plu_jual yang PLU_BAHAN_BAKU nya enggak ada di prodmast dan di recipe
                         For i As Integer = 0 To unavailablePluJual.Count - 1
                             cmd.CommandText = $"DELETE FROM resepMasterTemp WHERE PLU_JUAL = '{unavailablePluJual(i)}';"
                             cmd.ExecuteScalar()
                         Next
                         ' process enam ends
+
+                        ' process tujuh starts -> check apakah masing masing plu bahan baku ada di konversi_plu dan hpp tidak 0, kalo tidak dimasukan ke .txt
+                        cmd.CommandText = $"Select distinct PLU_JUAL, plu_bahan_baku from resepMasterTemp; "
+                        da.SelectCommand = cmd
+                        da.Fill(dt)
+                        sb.AppendLine("Daftar PLU_BAHAN_BAKU yang tidak ada di konversi_plu dan hpp = 0")
+                        sb.AppendLine("PLU JUAL - PLU RESEP")
+                        For i As Integer = 0 To dt.Rows.Count - 1
+                            cmd.CommandText = $"SELECT  (r.qty * p.acost) as hpp, r.plu_jual, r.plu_bahan_baku FROM resepMasterTemp AS r INNER JOIN prodmast AS p ON p.prdcd = r.plu_bahan_baku  WHERE  r.plu_bahan_baku = '{dt.Rows(i)("PLU_BAHAN_BAKU")}' AND r.plu_jual = '{dt.Rows(i)("PLU_JUAL")}';"
+                            If total_rmplu <= 0 Then
+
+                                Using reader As MySqlDataReader = cmd.ExecuteReader()
+                                    While reader.Read()
+                                        sb.AppendLine($"{reader("hpp")} - {reader("plu_jual")} - {reader("plu_bahan_baku")}")
+                                    End While
+                                End Using
+                                unavailablePluJual.Add(dt.Rows(i)("PLU_JUAL").ToString())
+
+                            End If
+
+                        Next
+                        dt.Clear() 'Clear dt
+                        sb.AppendLine()
+                        sb.AppendLine()
+                        ' process tujuh ends
+
+                        ' process delapan starts -> delete plu_jual yang PLU_BAHAN_BAKU nya enggak ada di konvesi_plu dan hpp = 0
+                        For i As Integer = 0 To unavailablePluJual.Count - 1
+                            cmd.CommandText = $"DELETE FROM resepMasterTemp WHERE PLU_JUAL = '{unavailablePluJual(i)}';"
+                            cmd.ExecuteScalar()
+                        Next
+                        ' process delapan ends
+
+                        ' process sembilan starts -> Inserting empty PLU_BAHAN_BAKU to the .txt
+                        cmd.CommandText = "SELECT  DISTINCT r.plu_jual, r.PLU_BAHAN_BAKU, prodmast.desc2 FROM resepMasterTemp AS r INNER JOIN prodmast ON r.plu_bahan_baku = prodmast.prdcd WHERE r.satuan = '-' OR r.satuan = '' OR r.satuan = ' ' GROUP BY r.plu_bahan_baku;"
+                        da.SelectCommand = cmd
+                        sb.AppendLine("List PLU jual dari file CSV yang SATUAN nya = '-' OR ' ' OR ''")
+                        sb.AppendLine("PLU_JUAL - PLU_BAHAN_BAKU - NAMA_PLU_BAHAN_BAKU")
+                        da.Fill(dt) ' Fill dt
+                        Using reader As MySqlDataReader = cmd.ExecuteReader()
+                            While reader.Read()
+                                sb.AppendLine($"{reader("plu_jual")} - {reader("PLU_BAHAN_BAKU")} - {reader("desc2")}")
+                            End While
+                        End Using
+                        dt.Clear() 'Clear dt
+                        sb.AppendLine()
+                        ' proces sembilan ends
 
                         WritingLogToFile("PLU_BAHAN_BAKU_HILANG", sb.ToString())
                     Catch ex As Exception
@@ -689,8 +710,7 @@ Public Class Form1
                 Using cmd As New MySqlCommand("", connection)
                     Try
 
-                        cmd.CommandText = "DELETE FROM resepMasterTemp WHERE plu_bahan_baku = '-' OR plu_bahan_baku = '' OR plu_bahan_baku = ' ';"
-                        cmd.ExecuteScalar()
+
                         cmd.CommandText = $"SELECT 
                                                 DISTINCT r.PLU_BAHAN_BAKU, 
                                                 b.plu_konv, 

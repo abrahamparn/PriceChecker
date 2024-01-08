@@ -5,7 +5,7 @@ Module InitializationProject
     Public MasterMcon As MySqlConnection
     Public isSector As Boolean = False
     Friend a As New IDM.Sector
-    Friend MyKey As String = "7F32DF687D8B7D21437963307AFB66CB"
+    Friend MyKey As String = "6D9A2B6195BFD0EB5B7C3ACBEB58AB99"
 
     Public Sub Main()
         Try
