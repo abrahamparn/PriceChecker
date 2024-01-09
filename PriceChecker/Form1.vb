@@ -79,6 +79,7 @@ Public Class Form1
             CSVCheckPluBahanBaku()
             checkPluAsalDanAcost()
             FinalCheck()
+            ListingPLUDanHasil()
         End If
     End Sub
 
@@ -743,8 +744,6 @@ Public Class Form1
 
                 Using cmd As New MySqlCommand("", connection)
                     Try
-
-
                         cmd.CommandText = $"SELECT 
                                             rMT.PLU_JUAL, 
                                             rMT.PLU_BAHAN_BAKU, 
@@ -897,7 +896,7 @@ Public Class Form1
                                 sb.AppendLine($"{reader("PLU_JUAL")} - {reader("Total_HPPMRecipe")} - {reader("ACOSTJUAL")}")
                             End While
                         End Using
-                        WritingLogToFile("HPP_BEDA_DENGAN_HPP_JUAL", sb.ToString())
+                        WritingLogToFile("HPP_BEDA_DENGAN_ACOST_JUAL", sb.ToString())
                     Catch ex As Exception
                         TraceLog(ex.Message)
                         MsgBox(ex.Message)
@@ -909,6 +908,54 @@ Public Class Form1
             TraceLog(ex.Message)
             MsgBox(ex.Message)
         End Try
+
+
+    End Sub
+    Private Sub ListingPLUDanHasil()
+        Dim da As New MySqlDataAdapter
+        Dim dt As New DataTable
+        Dim unavailablePluJual As New List(Of String)()
+        Dim rmplu As String = ""
+        Dim total_rmplu As Integer = 0
+        Dim sb As New System.Text.StringBuilder
+        Try
+            Using connection As MySqlConnection = MasterMcon.Clone()
+                If connection.State = ConnectionState.Closed Then
+                    connection.Open()
+                End If
+                sb.AppendLine("Listing ")
+                sb.AppendLine()
+                sb.AppendLine("PLU_JUAL - PLU_BAHAN_BAKU - QTY - PLU_KONV - PLU_ASAL - HPP_MANUAL - HPP_RECIPE")
+
+                Using cmd As New MySqlCommand("", connection)
+                    Try
+
+                        cmd.CommandText = $"
+                              SELECT PLU_JUAL, PLU_BAHAN_BAKU, QTY, PLU_KONV, PLU_ASAL, HPP AS HPP_MANUAL, HPPPRICE AS HPP_RECIPE FROM bandingHppPluJualDanAcostProdmast"
+
+                        Using reader As MySqlDataReader = cmd.ExecuteReader()
+                            While reader.Read()
+                                sb.AppendLine($"{reader("PLU_JUAL")} - {reader("PLU_BAHAN_BAKU")} - {reader("QTY")} - {reader("PLU_KONV")} - {reader("PLU_ASAL")} - {reader("HPP_MANUAL")} - {reader("HPP_RECIPE")}")
+                            End While
+                        End Using
+
+
+
+
+                        WritingLogToFile("LIST_PLU_JUAL_DAN_HPP_MANUAL", sb.ToString())
+                    Catch ex As Exception
+                        TraceLog(ex.Message)
+                        MsgBox(ex.Message)
+                    End Try
+                End Using
+                connection.Close()
+            End Using
+        Catch ex As Exception
+            TraceLog(ex.Message)
+            MsgBox(ex.Message)
+        End Try
+
+
     End Sub
     'Private Sub BGWorker_CheckPrice_RunWorkerCompleted(sender As Object, e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BGWorker_CheckPrice.RunWorkerCompleted
     '    ResetUIAndShowCompletionMessage()
