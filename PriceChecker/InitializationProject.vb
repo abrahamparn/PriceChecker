@@ -4,8 +4,8 @@ Imports IDM.Fungsi
 Module InitializationProject
     Public MasterMcon As MySqlConnection
     Public isSector As Boolean = True
-    Friend a As New IDM.Sector
-    Friend MyKey As String = "D29084F7B057C76DBF20E656506A0066"
+    Friend a As New IDM.Reactor.Sector
+    Friend MyKey As String = "F69EDD0023EF05D97B0CA039150F5F3E"
 
     Public Sub Main()
         Try
