@@ -938,10 +938,6 @@ Public Class Form1
                                 sb.AppendLine($"{reader("PLU_JUAL")} - {reader("PLU_BAHAN_BAKU")} - {reader("QTY")} - {reader("PLU_KONV")} - {reader("PLU_ASAL")} - {reader("HPP_MANUAL")} - {reader("HPP_RECIPE")}")
                             End While
                         End Using
-
-
-
-
                         WritingLogToFile("LIST_PLU_JUAL_DAN_HPP_MANUAL", sb.ToString())
                     Catch ex As Exception
                         TraceLog(ex.Message)
