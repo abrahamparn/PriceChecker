@@ -78,6 +78,7 @@ Public Class Form1
             End If
             CSVCheckPluBahanBaku()
             checkPluAsalDanAcost()
+            FinalCheck()
         End If
     End Sub
 
@@ -432,6 +433,22 @@ Public Class Form1
                             ) ENGINE=INNODB DEFAULT CHARSET=latin1;
                         "
                     command.ExecuteNonQuery()
+                    command.CommandText = "Drop table if exists bandingHppPluJualDanAcostProdmast; "
+                    command.ExecuteNonQuery()
+
+                    command.CommandText = $"      CREATE TABLE `bandingHppPluJualDanAcostProdmast` (
+                              `PLU_JUAL` VARCHAR(8) NOT NULL DEFAULT '',
+                              `PLU_BAHAN_BAKU` VARCHAR(8) NOT NULL DEFAULT '',
+                              `QTY` VARCHAR(8) NOT NULL DEFAULT '',
+                              `PLU_KONV` VARCHAR(8) NOT NULL DEFAULT '',
+                                 `HPP` DECIMAL(10,4) NOT NULL DEFAULT 0,
+                                `PLU_ASAL` VARCHAR(8) NOT NULL DEFAULT '',
+                                `HPPPRICE` DECIMAL(10,4) NOT NULL DEFAULT 0,
+                                ACOSTJUAL DECIMAL(10,4) NOT NULL DEFAULT 0,
+                              PRIMARY KEY (`PLU_JUAL`,`PLU_BAHAN_BAKU`)
+                            ) ENGINE=INNODB DEFAULT CHARSET=latin1;"
+                    command.ExecuteNonQuery()
+
                 End Using
             End Using
         Catch ex As Exception
@@ -552,6 +569,21 @@ Public Class Form1
 
                 Using cmd As New MySqlCommand("", connection)
                     Try
+                        cmd.CommandText = "Drop table if exists bandingHppPluJualDanAcostProdmast; "
+                        cmd.ExecuteNonQuery()
+
+                        cmd.CommandText = $"      CREATE TABLE `bandingHppPluJualDanAcostProdmast` (
+                              `PLU_JUAL` VARCHAR(8) NOT NULL DEFAULT '',
+                              `PLU_BAHAN_BAKU` VARCHAR(8) NOT NULL DEFAULT '',
+                              `QTY` VARCHAR(8) NOT NULL DEFAULT '',
+                              `PLU_KONV` VARCHAR(8) NOT NULL DEFAULT '',
+                                 `HPP` DECIMAL(10,4) NOT NULL DEFAULT 0,
+                                `PLU_ASAL` VARCHAR(8) NOT NULL DEFAULT '',
+                                `HPPPRICE` DECIMAL(10,4) NOT NULL DEFAULT 0,
+                                ACOSTJUAL DECIMAL(10,4) NOT NULL DEFAULT 0,
+                              PRIMARY KEY (`PLU_JUAL`,`PLU_BAHAN_BAKU`)
+                            ) ENGINE=INNODB DEFAULT CHARSET=latin1;"
+                        cmd.ExecuteNonQuery()
                         ' process one starts -> Inserting empty PLU_BAHAN_BAKU to the .txt
                         cmd.CommandText = "select PLU_BAHAN_BAKU, plu_jual from resepMasterTemp WHERE plu_bahan_baku = '-' OR plu_bahan_baku = '' OR plu_bahan_baku = ' ';"
                         da.SelectCommand = cmd
@@ -648,6 +680,7 @@ Public Class Form1
                                         sb.AppendLine($"{reader("hpp")} - {reader("plu_jual")} - {reader("plu_bahan_baku")}")
                                     End While
                                 End Using
+
                                 unavailablePluJual.Add(dt.Rows(i)("PLU_JUAL").ToString())
 
                             End If
@@ -717,37 +750,36 @@ Public Class Form1
                                             rMT.PLU_BAHAN_BAKU, 
                                             rMT.QTY, 
                                             COALESCE(
-                                                (SELECT KP.PLU_KONV 
+                                                    (SELECT KP.PLU_KONV 
                                                     FROM konversi_plu AS KP 
                                                     WHERE rMT.PLU_BAHAN_BAKU = KP.PLU_KONV
                                                     LIMIT 1),
                                                     rMT.PLU_BAHAN_BAKU
                                                 ) AS PLU_KONV,
                                             COALESCE(
-                                                (SELECT MIN(PInner.acost/KPInner.nilai*rMTInner.qty) AS hpp FROM resepMasterTemp AS rMTInner
-                                                INNER JOIN konversi_plu AS KPInner ON rMTInner.plu_bahan_baku = KPInner.PLU_KONV
-                                                INNER JOIN prodmast AS PInner ON KPInner.PLU_ASAL = PInner.prdcd WHERE KPInner.PLU_KONV =  rMT.PLU_BAHAN_BAKU AND rMTInner.PLU_JUAL = rMT.PLU_JUAL),
-                                                (SELECT (rMT.qty * p.acost) FROM prodmast AS p WHERE rMT.PLU_BAHAN_BAKU = p.prdcd)
+                                                    (SELECT MIN(PInner.acost/KPInner.nilai*rMTInner.qty) AS hpp FROM resepMasterTemp AS rMTInner
+                                                    INNER JOIN konversi_plu AS KPInner ON rMTInner.plu_bahan_baku = KPInner.PLU_KONV
+                                                    INNER JOIN prodmast AS PInner ON KPInner.PLU_ASAL = PInner.prdcd WHERE KPInner.PLU_KONV =  rMT.PLU_BAHAN_BAKU AND rMTInner.PLU_JUAL = rMT.PLU_JUAL),
+                                                    (SELECT (rMT.qty * p.acost) FROM prodmast AS p WHERE rMT.PLU_BAHAN_BAKU = p.prdcd)
                                                 ) AS HPP,
-                                                COALESCE(
-                                            (SELECT KPInner.plu_asal 
-                                                FROM resepMasterTemp AS rMTInner
-                                                INNER JOIN konversi_plu AS KPInner ON rMTInner.plu_bahan_baku = KPInner.PLU_KONV
-                                                INNER JOIN prodmast AS PInner ON KPInner.PLU_ASAL = PInner.prdcd 
-                                                WHERE KPInner.PLU_KONV = rMT.PLU_BAHAN_BAKU AND rMTInner.PLU_JUAL = rMT.PLU_JUAL 
-                                                GROUP BY KPInner.plu_asal
-                                                ORDER BY MIN(PInner.acost/KPInner.nilai*rMTInner.qty) 
-                                                LIMIT 1),
-                                            (SELECT p.prdcd FROM prodmast AS p WHERE rMT.PLU_BAHAN_BAKU = p.prdcd)
-                                        ) AS PLU_ASAL,
-                                                COALESCE(
+                                            COALESCE(
+                                                    (SELECT KPInner.plu_asal 
+                                                    FROM resepMasterTemp AS rMTInner
+                                                    INNER JOIN konversi_plu AS KPInner ON rMTInner.plu_bahan_baku = KPInner.PLU_KONV
+                                                    INNER JOIN prodmast AS PInner ON KPInner.PLU_ASAL = PInner.prdcd 
+                                                    WHERE KPInner.PLU_KONV = rMT.PLU_BAHAN_BAKU AND rMTInner.PLU_JUAL = rMT.PLU_JUAL 
+                                                    GROUP BY KPInner.plu_asal
+                                                    ORDER BY MIN(PInner.acost/KPInner.nilai*rMTInner.qty) 
+                                                    LIMIT 1),
+                                                    (SELECT p.prdcd FROM prodmast AS p WHERE rMT.PLU_BAHAN_BAKU = p.prdcd)
+                                                ) AS PLU_ASAL,
+                                            COALESCE(
                                                     (SELECT(r.qty * p.acost) AS HPPRECIPE FROM recipe AS r JOIN prodmast AS p ON r.rmplu = p.prdcd WHERE r.rmplu = rMT.PLU_BAHAN_BAKU AND r.plu = rMT.PLU_JUAL), 
                                                     (SELECT (rMT.qty * p.acost) FROM prodmast AS p WHERE rMT.PLU_BAHAN_BAKU = p.prdcd)
-    
-                                                    ) AS HPPRECIPE
-                                        FROM 
-                                            resepMasterTemp AS rMT
-                                            "
+                                                ) AS HPPRECIPE,
+                                                COALESCE((SELECT acost FROM prodmast WHERE prdcd = rMT.PLU_JUAl), 0) AS ACOSTJUAL
+                                            FROM 
+                                                resepMasterTemp AS rMT"
 
                         da.SelectCommand = cmd
                         da.Fill(dt)
@@ -759,6 +791,14 @@ Public Class Form1
                         ab.AppendLine()
                         Dim insertQuery As New System.Text.StringBuilder("INSERT INTO recipe (plu, rmplu, qty, addtime) VALUES ")
                         For i As Integer = 0 To dt.Rows.Count - 1
+                            cmd.CommandText = $"INSERT INTO bandingHppPluJualDanAcostProdmast  (PLU_JUAL, PLU_BAHAN_BAKU, QTY, PLU_KONV, HPP, PLU_ASAL, HPPPRICE, ACOSTJUAL)
+                                                VALUES 
+                                                ('{dt.Rows(i)("PLU_JUAL")}', '{dt.Rows(i)("PLU_BAHAN_BAKU")}', 
+                                                '{dt.Rows(i)("QTY")}', '{dt.Rows(i)("PLU_KONV")}', 
+                                                '{Math.Round(Convert.ToDecimal(dt.Rows(i)("HPP")), 3)}', '{dt.Rows(i)("PLU_ASAL")}', 
+                                                '{Math.Round(Convert.ToDecimal(dt.Rows(i)("HPPRECIPE")), 3)}', '{dt.Rows(i)("ACOSTJUAL")}')
+                                                "
+                            cmd.ExecuteScalar()
                             If Math.Round(Convert.ToDecimal(dt.Rows(i)("HPP")), 3) <> Math.Round(Convert.ToDecimal(dt.Rows(i)("HPPRECIPE")), 3) Then
 
                                 sb.AppendLine($"{dt.Rows(i)("PLU_JUAL").ToString()}|{dt.Rows(i)("PLU_BAHAN_BAKU").ToString()}|{dt.Rows(i)("PLU_KONV").ToString()}|{dt.Rows(i)("HPP").ToString()}|{dt.Rows(i)("HPPRECIPE").ToString()}|{dt.Rows(i)("PLU_ASAL").ToString()}")
@@ -785,6 +825,79 @@ Public Class Form1
                         WritingLogToFile("Banding_Konv_asal_beda", sb.ToString())
                         WritingLogToFile("insert_to_recipe_query", ab.ToString())
 
+                    Catch ex As Exception
+                        TraceLog(ex.Message)
+                        MsgBox(ex.Message)
+                    End Try
+                End Using
+                connection.Close()
+            End Using
+        Catch ex As Exception
+            TraceLog(ex.Message)
+            MsgBox(ex.Message)
+        End Try
+    End Sub
+    Private Sub FinalCheck()
+        Dim da As New MySqlDataAdapter
+        Dim dt As New DataTable
+        Dim unavailablePluJual As New List(Of String)()
+        Dim rmplu As String = ""
+        Dim total_rmplu As Integer = 0
+        Dim sb As New System.Text.StringBuilder
+        Try
+            Using connection As MySqlConnection = MasterMcon.Clone()
+                If connection.State = ConnectionState.Closed Then
+                    connection.Open()
+                End If
+                sb.AppendLine("Where Result of Acost Jual and Total HPP Manual does not match")
+                sb.AppendLine()
+                sb.AppendLine("PLU_JUAL - TOTAL_HPP_MANUAL - ACOST_JUAL")
+
+                Using cmd As New MySqlCommand("", connection)
+                    Try
+
+                        cmd.CommandText = $"
+                                SELECT 
+                                    PLU_JUAL,
+                                    ROUND(SUM(HPP), 0) AS Total_HPPManual,
+                                    ROUND(ACOSTJUAL, 0)
+                                    ACOSTJUAL
+                                FROM 
+                                    bandingHppPluJualDanAcostProdmast
+                                GROUP BY 
+                                    PLU_JUAL
+                                HAVING 
+                                    Total_HPPManual <> ACOSTJUAL"
+
+                        Using reader As MySqlDataReader = cmd.ExecuteReader()
+                            While reader.Read()
+                                sb.AppendLine($"{reader("PLU_JUAL")} - {reader("Total_HPPManual")} - {reader("ACOSTJUAL")}")
+                            End While
+                        End Using
+
+                        sb.AppendLine()
+                        sb.AppendLine("Where Result of Acost Jual and Total HPP Recipe does not match")
+                        sb.AppendLine()
+                        sb.AppendLine("PLU_JUAL - TOTAL_HPP_RECIPE - ACOST_JUAL")
+                        cmd.CommandText = $"
+                               SELECT 
+                                    PLU_JUAL,
+                                    ROUND(SUM(HPPPRICE), 0) AS Total_HPPMRecipe,
+                                    ROUND(ACOSTJUAL, 0)
+                                    ACOSTJUAL
+                                FROM 
+                                    bandingHppPluJualDanAcostProdmast
+                                GROUP BY 
+                                    PLU_JUAL
+                                HAVING 
+                                    Total_HPPMRecipe <> ACOSTJUAL"
+
+                        Using reader As MySqlDataReader = cmd.ExecuteReader()
+                            While reader.Read()
+                                sb.AppendLine($"{reader("PLU_JUAL")} - {reader("Total_HPPMRecipe")} - {reader("ACOSTJUAL")}")
+                            End While
+                        End Using
+                        WritingLogToFile("HPP_BEDA_DENGAN_HPP_JUAL", sb.ToString())
                     Catch ex As Exception
                         TraceLog(ex.Message)
                         MsgBox(ex.Message)
